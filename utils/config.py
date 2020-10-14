@@ -5,12 +5,11 @@ seed = 12345
 epochs = 50
 batch_size = 20
 max_boxes = 150
-image_size = 1024
+image_size = 640
 data_dir = join('..', 'Dataset', 'VOC2012')
 image_dir = 'IMAGES'
 label_dir = 'LABELS'
-damage_classes = {'DAMAGE': 0}
-voc_classes = {'aeroplane': 0,
+classes = {'aeroplane': 0,
                'bicycle': 1,
                'bird': 2,
                'boat': 3,
@@ -30,7 +29,6 @@ voc_classes = {'aeroplane': 0,
                'sofa': 17,
                'train': 18,
                'tvmonitor': 19}
-classes = voc_classes
 strides = [8, 16, 32]
 anchors = np.array([[9, 8], [12, 11], [14, 15],
                     [17, 8], [18, 24], [25, 13],

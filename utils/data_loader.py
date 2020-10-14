@@ -45,7 +45,7 @@ class Generator(Sequence):
 
 def input_fn(f_names):
     def generator_fn():
-        generator = OrderedEnqueuer(Generator(f_names), True, True)
+        generator = OrderedEnqueuer(Generator(f_names), True)
         generator.start(workers=8, max_queue_size=10)
         while True:
             image, y_true_1, y_true_2, y_true_3 = next(generator.get())

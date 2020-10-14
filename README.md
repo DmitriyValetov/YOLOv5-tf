@@ -22,3 +22,6 @@
 * xml file should be in PascalVOC format
 * for making `train.txt`, see `VOC2012/ImageSets/Main/train.txt` 
 
+#### Reference
+* https://github.com/ultralytics/yolov5
+* https://github.com/wizyoung/YOLOv3_TensorFlow

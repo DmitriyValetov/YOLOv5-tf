@@ -3,13 +3,14 @@ from os.path import join
 
 seed = 12345
 epochs = 50
-batch_size = 20
+batch_size = 24
 max_boxes = 150
-image_size = 640
-data_dir = join('..', 'Dataset', 'VOC2012')
+image_size = 1024
+data_dir = join('..', 'Dataset')
 image_dir = 'IMAGES'
 label_dir = 'LABELS'
-classes = {'aeroplane': 0,
+classes = {"DAMAGE": 0}
+voc_classes = {'aeroplane': 0,
                'bicycle': 1,
                'bird': 2,
                'boat': 3,

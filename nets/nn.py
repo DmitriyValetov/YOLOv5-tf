@@ -7,7 +7,8 @@ from tensorflow.keras import models
 
 from utils import config
 
-initializer = 'he_normal'
+initializer = {'class_name': 'VarianceScaling',
+               'config': {'scale': 2.0, 'mode': 'fan_out', 'distribution': 'normal'}}
 
 
 def activation_fn(x):
@@ -45,7 +46,7 @@ def csp_block(x, filters, n, residual=True):
     x = layers.Conv2D(filters // 2, 1, 1, use_bias=False, kernel_initializer=initializer)(x)
     x = layers.concatenate([x, y])
     x = layers.BatchNormalization(momentum=0.03)(x)
-    x = layers.Activation(activation_fn)(x)
+    x = layers.LeakyReLU(0.1)(x)
 
     x = conv_block(x, filters, 1, 1)
     return x
@@ -54,18 +55,18 @@ def csp_block(x, filters, n, residual=True):
 def backbone(x):
     x = nn.space_to_depth(x, 2)
 
-    x = conv_block(x, 64, 5)
+    x = conv_block(x, 64, 3)
     x = conv_block(x, 128, 3, 2)
 
-    x = csp_block(x, 128, 4)
+    x = csp_block(x, 128, 3)
     x = conv_block(x, 256, 3, 2)
 
-    x = csp_block(x, 256, 10)
+    x = csp_block(x, 256, 9)
     skip_1 = x
 
     x = conv_block(x, 512, 3, 2)
 
-    x = csp_block(x, 512, 10)
+    x = csp_block(x, 512, 9)
     skip_2 = x
 
     x = conv_block(x, 1024, 3, 2)
@@ -74,7 +75,7 @@ def backbone(x):
                             nn.max_pool(x, ksize=9, strides=1, padding='SAME'),
                             nn.max_pool(x, ksize=13, strides=1, padding='SAME')])
 
-    x = csp_block(x, 1024, 4, False)
+    x = csp_block(x, 1024, 3, False)
     return skip_1, skip_2, x
 
 
@@ -86,25 +87,25 @@ def build_model(training=True):
     x = conv_block(x, 512, 1)
     x = layers.UpSampling2D(interpolation='bilinear')(x)
     x = layers.concatenate([x, skip_2])
-    x = csp_block(x, 512, 4, False)
+    x = csp_block(x, 512, 3, False)
     x = conv_block(x, 256, 1)
     skip_4 = x
 
     x = layers.UpSampling2D(interpolation='bilinear')(x)
     x = layers.concatenate([x, skip_1])
-    x = csp_block(x, 256, 4, False)
+    x = csp_block(x, 256, 3, False)
     large = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     large = tf.identity(large)
 
     x = conv_block(x, 256, 3, 2)
     x = layers.concatenate([x, skip_4])
-    x = csp_block(x, 512, 4, False)
+    x = csp_block(x, 512, 3, False)
     medium = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     medium = tf.identity(medium)
 
     x = conv_block(x, 512, 3, 2)
     x = layers.concatenate([x, skip_3])
-    x = csp_block(x, 1024, 4, False)
+    x = csp_block(x, 1024, 3, False)
     small = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     small = tf.identity(small)
     if training:
@@ -215,7 +216,7 @@ def process_loss(feature_map_i, y_true, anchors):
 
     object_mask = y_true[..., 4:5]
 
-    def loop_cond(idx, mask):
+    def loop_cond(idx, _):
         return tf.less(idx, tf.cast(batch_size, tf.int32))
 
     def loop_body(idx, mask):
@@ -316,7 +317,7 @@ def compute_loss(y_pred, y_true):
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
     def __init__(self, warmup_step):
         super().__init__()
-        self.lr_min = 1e-5
+        self.lr_min = 4e-5
         self.lr_max = 1e-3
         self.warmup_step = warmup_step
         self.decay_steps = tf.cast(warmup_step * (config.epochs - 1), tf.float32)

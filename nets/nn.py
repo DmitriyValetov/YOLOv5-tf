@@ -7,8 +7,7 @@ from tensorflow.keras import models
 
 from utils import config
 
-initializer = {'class_name': 'VarianceScaling',
-               'config': {'scale': 2.0, 'mode': 'fan_out', 'distribution': 'normal'}}
+initializer = 'he_normal'
 
 
 def activation_fn(x):

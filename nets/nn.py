@@ -7,7 +7,7 @@ from tensorflow.keras import models
 
 from utils import config
 
-initializer = 'he_normal'
+initializer = tf.random_normal_initializer(stddev=0.01)
 
 
 def activation_fn(x):
@@ -37,17 +37,17 @@ def residual_block(x, filters, residual=True):
 
 
 def csp_block(x, filters, n, residual=True):
-    y = conv_block(x, filters // 2, 1, 1)
+    y = conv_block(x, filters, 1, 1)
     for _ in range(n):
-        y = residual_block(y, filters // 2, residual)
-    y = layers.Conv2D(filters // 2, 1, 1, use_bias=False, kernel_initializer=initializer)(y)
+        y = residual_block(y, filters, residual)
+    y = layers.Conv2D(filters, 1, 1, use_bias=False, kernel_initializer=initializer)(y)
 
-    x = layers.Conv2D(filters // 2, 1, 1, use_bias=False, kernel_initializer=initializer)(x)
+    x = layers.Conv2D(filters, 1, 1, use_bias=False, kernel_initializer=initializer)(x)
     x = layers.concatenate([x, y])
     x = layers.BatchNormalization(momentum=0.03)(x)
     x = layers.LeakyReLU(0.1)(x)
 
-    x = conv_block(x, filters, 1, 1)
+    x = conv_block(x, 2 * filters, 1, 1)
     return x
 
 
@@ -57,24 +57,25 @@ def backbone(x):
     x = conv_block(x, 64, 3)
     x = conv_block(x, 128, 3, 2)
 
-    x = csp_block(x, 128, 3)
+    x = csp_block(x, 64, 3)
     x = conv_block(x, 256, 3, 2)
 
-    x = csp_block(x, 256, 9)
+    x = csp_block(x, 128, 9)
     skip_1 = x
 
     x = conv_block(x, 512, 3, 2)
 
-    x = csp_block(x, 512, 9)
+    x = csp_block(x, 256, 9)
     skip_2 = x
 
     x = conv_block(x, 1024, 3, 2)
+    x = conv_block(x, 512, 1, 1)
     x = layers.concatenate([x,
                             nn.max_pool(x, ksize=5, strides=1, padding='SAME'),
                             nn.max_pool(x, ksize=9, strides=1, padding='SAME'),
                             nn.max_pool(x, ksize=13, strides=1, padding='SAME')])
-
-    x = csp_block(x, 1024, 3, False)
+    x = conv_block(x, 1024, 1, 1)
+    x = csp_block(x, 512, 3, False)
     return skip_1, skip_2, x
 
 

@@ -18,7 +18,7 @@ def main():
     model = nn.build_model(training=False)
     model.load_weights("weights/model30.h5", True)
 
-    image = cv2.imread('../Dataset/Dubai/IMAGES/1004_01_0.jpg')
+    image = cv2.imread('../Dataset/VOC2012/IMAGES/1004_01_0.jpg')
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     image_data, dw, dh, scale = util.resize(image)

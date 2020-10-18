@@ -31,11 +31,7 @@ class Generator(Sequence):
         image, boxes = resize(image, boxes)
 
         image = image.astype(np.float32)
-        image /= 255.
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
-        image -= mean
-        image /= std
+        image = image / 255.
         y_true_1, y_true_2, y_true_3 = process_box(boxes, label)
         return image, y_true_1, y_true_2, y_true_3
 

@@ -16,17 +16,13 @@ def draw_bbox(image, boxes):
 
 def main():
     model = nn.build_model(training=False)
-    model.load_weights("weights/model26.h5")
+    model.load_weights("weights/model30.h5", True)
 
-    image = cv2.imread('../Dataset/VOC2012/IMAGES/2007_000027.jpg')
+    image = cv2.imread('../Dataset/Dubai/IMAGES/1004_01_0.jpg')
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     image_data, dw, dh, scale = util.resize(image)
     image_data = image_data.astype(np.float32) / 255.0
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    image_data -= mean
-    image_data /= std
 
     boxes, score, label = model.predict(image_data[np.newaxis, ...])
 

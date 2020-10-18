@@ -45,7 +45,7 @@ def csp_block(x, filters, n, residual=True):
     x = layers.Conv2D(filters, 1, 1, use_bias=False, kernel_initializer=initializer)(x)
     x = layers.concatenate([x, y])
     x = layers.BatchNormalization(momentum=0.03)(x)
-    x = layers.LeakyReLU(0.1)(x)
+    x = layers.Activation(activation_fn)(x)
 
     x = conv_block(x, 2 * filters, 1, 1)
     return x
@@ -71,9 +71,9 @@ def backbone(x):
     x = conv_block(x, 1024, 3, 2)
     x = conv_block(x, 512, 1, 1)
     x = layers.concatenate([x,
-                            nn.max_pool(x, ksize=5, strides=1, padding='SAME'),
-                            nn.max_pool(x, ksize=9, strides=1, padding='SAME'),
-                            nn.max_pool(x, ksize=13, strides=1, padding='SAME')])
+                            layers.MaxPool2D((5, 5), 1, 'same')(x),
+                            layers.MaxPool2D((9, 9), 1, 'same')(x),
+                            layers.MaxPool2D((13, 13), 1, 'same')(x)])
     x = conv_block(x, 1024, 1, 1)
     x = csp_block(x, 512, 3, False)
     return skip_1, skip_2, x
@@ -181,7 +181,7 @@ def predict(feature_maps):
     return gpu_nms(boxes, conf * prob, len(config.classes))
 
 
-def gpu_nms(boxes, scores, num_classes, max_boxes=50, score_thresh=0.5, nms_thresh=0.5):
+def gpu_nms(boxes, scores, num_classes, max_boxes=50, score_thresh=0.2, nms_thresh=0.1):
     boxes_list, label_list, score_list = [], [], []
     max_boxes = tf.constant(max_boxes, dtype='int32')
 
@@ -248,6 +248,7 @@ def process_loss(feature_map_i, y_true, anchors):
 
     box_loss_scale_1 = y_true[..., 2:3] / tf.cast(tf.constant([config.image_size, config.image_size])[1], tf.float32)
     box_loss_scale_2 = y_true[..., 3:4] / tf.cast(tf.constant([config.image_size, config.image_size])[0], tf.float32)
+
     box_loss_scale = 2. - box_loss_scale_1 * box_loss_scale_2
 
     mix_w = y_true[..., -1:]
@@ -270,7 +271,7 @@ def process_loss(feature_map_i, y_true, anchors):
     delta = 0.01
     label_target = (1 - delta) * y_true[..., 5:-1] + delta * 1. / len(config.classes)
 
-    class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(label_target, pred_prob) * mix_w
+    class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_target, logits=pred_prob) * mix_w
     class_loss = tf.reduce_sum(class_loss) / batch_size
 
     return xy_loss, wh_loss, conf_loss, class_loss
@@ -317,7 +318,7 @@ def compute_loss(y_pred, y_true):
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
     def __init__(self, warmup_step):
         super().__init__()
-        self.lr_min = 4e-5
+        self.lr_min = 1e-5
         self.lr_max = 1e-3
         self.warmup_step = warmup_step
         self.decay_steps = tf.cast(warmup_step * (config.epochs - 1), tf.float32)

@@ -19,7 +19,6 @@ def conv_block(inputs, filters, kernel_size, strides=1):
     x = layers.Conv2D(filters, kernel_size, strides, 'same', use_bias=False, kernel_initializer=initializer)(inputs)
     x = layers.BatchNormalization(momentum=0.03)(x)
     x = layers.Activation(activation_fn)(x)
-
     return x
 
 
@@ -54,28 +53,30 @@ def csp_block(x, filters, n, residual=True):
 def backbone(x):
     x = nn.space_to_depth(x, 2)
 
-    x = conv_block(x, 64, 3)
-    x = conv_block(x, 128, 3, 2)
+    x = conv_block(x, 80, 3)
+    x = conv_block(x, 160, 3, 2)
 
-    x = csp_block(x, 64, 3)
-    x = conv_block(x, 256, 3, 2)
+    x = csp_block(x, 80, 4)
+    x = conv_block(x, 320, 3, 2)
 
-    x = csp_block(x, 128, 9)
+    x = csp_block(x, 160, 12)
     skip_1 = x
 
-    x = conv_block(x, 512, 3, 2)
+    x = conv_block(x, 640, 3, 2)
 
-    x = csp_block(x, 256, 9)
+    x = csp_block(x, 320, 12)
     skip_2 = x
 
-    x = conv_block(x, 1024, 3, 2)
-    x = conv_block(x, 512, 1, 1)
+    x = conv_block(x, 1280, 3, 2)
+
+    x = conv_block(x, 640, 1, 1)
     x = layers.concatenate([x,
                             layers.MaxPool2D((5, 5), 1, 'same')(x),
                             layers.MaxPool2D((9, 9), 1, 'same')(x),
                             layers.MaxPool2D((13, 13), 1, 'same')(x)])
-    x = conv_block(x, 1024, 1, 1)
-    x = csp_block(x, 512, 3, False)
+    x = conv_block(x, 1280, 1, 1)
+
+    x = csp_block(x, 640, 4, False)
     return skip_1, skip_2, x
 
 
@@ -84,28 +85,28 @@ def build_model(training=True):
     skip_1, skip_2, x = backbone(inputs)
     skip_3 = x
 
-    x = conv_block(x, 512, 1)
+    x = conv_block(x, 640, 1)
     x = layers.UpSampling2D(interpolation='bilinear')(x)
     x = layers.concatenate([x, skip_2])
-    x = csp_block(x, 512, 3, False)
-    x = conv_block(x, 256, 1)
+    x = csp_block(x, 640, 4, False)
+    x = conv_block(x, 320, 1)
     skip_4 = x
 
     x = layers.UpSampling2D(interpolation='bilinear')(x)
     x = layers.concatenate([x, skip_1])
-    x = csp_block(x, 256, 3, False)
+    x = csp_block(x, 320, 4, False)
     large = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     large = tf.identity(large)
 
-    x = conv_block(x, 256, 3, 2)
+    x = conv_block(x, 320, 3, 2)
     x = layers.concatenate([x, skip_4])
-    x = csp_block(x, 512, 3, False)
+    x = csp_block(x, 640, 4, False)
     medium = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     medium = tf.identity(medium)
 
-    x = conv_block(x, 512, 3, 2)
+    x = conv_block(x, 640, 3, 2)
     x = layers.concatenate([x, skip_3])
-    x = csp_block(x, 1024, 3, False)
+    x = csp_block(x, 640, 4, False)
     small = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)
     small = tf.identity(small)
     if training:
@@ -181,7 +182,7 @@ def predict(feature_maps):
     return gpu_nms(boxes, conf * prob, len(config.classes))
 
 
-def gpu_nms(boxes, scores, num_classes, max_boxes=50, score_thresh=0.2, nms_thresh=0.1):
+def gpu_nms(boxes, scores, num_classes, max_boxes=150, score_thresh=1e-5, nms_thresh=0.1):
     boxes_list, label_list, score_list = [], [], []
     max_boxes = tf.constant(max_boxes, dtype='int32')
 
@@ -203,7 +204,6 @@ def gpu_nms(boxes, scores, num_classes, max_boxes=50, score_thresh=0.2, nms_thre
     boxes = tf.concat(boxes_list, axis=0)
     score = tf.concat(score_list, axis=0)
     label = tf.concat(label_list, axis=0)
-
     return boxes, score, label
 
 

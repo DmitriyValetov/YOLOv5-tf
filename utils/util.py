@@ -79,7 +79,7 @@ def parse_annotations(xml_root):
 
 
 def load_image(f_name):
-    path = join(config.data_dir, config.image_dir, f_name + '.jpg')
+    path = join(config.base_dir, config.image_dir, f_name + '.jpg')
     image = cv2.imread(path)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image
@@ -87,7 +87,7 @@ def load_image(f_name):
 
 def load_label(f_name):
     try:
-        tree = parse_fn(join(config.data_dir, config.label_dir, f_name + '.xml'))
+        tree = parse_fn(join(config.base_dir, config.label_dir, f_name + '.xml'))
         return parse_annotations(tree.getroot())
     except ParseError as error:
         raise_from(ValueError('invalid annotations file: {}: {}'.format(f_name, error)), None)

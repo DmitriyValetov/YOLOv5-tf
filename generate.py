@@ -65,7 +65,7 @@ class AnchorGenerator:
     @staticmethod
     def get_boxes():
         boxes = []
-        f_names = [f_name[:-4] for f_name in os.listdir(join(config.data_dir, config.label_dir))]
+        f_names = [f_name[:-4] for f_name in os.listdir(join(config.base_dir, config.label_dir))]
         for f_name in f_names:
             annotations = load_label(f_name)
             for annotation in annotations:

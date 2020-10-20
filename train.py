@@ -20,7 +20,7 @@ from utils import data_loader
 strategy = tf.distribute.MirroredStrategy()
 
 f_names = []
-with open(join(config.data_dir, 'train.txt')) as reader:
+with open(join(config.base_dir, 'train.txt')) as reader:
     for line in reader.readlines():
         f_names.append(line.rstrip().split(' ')[0])
 
@@ -62,15 +62,14 @@ def distributed_train_step(image, y_true):
 
 
 def main():
-    print("--- Start Training ---")
     if not exists('weights'):
         os.makedirs('weights')
     pb = tf.keras.utils.Progbar(steps, stateful_metrics=['loss'])
     for step, inputs in enumerate(dataset):
-        step += 1
         if step % steps == 0:
             print(f'Epoch {step // steps + 1}/{config.epochs}')
             pb = tf.keras.utils.Progbar(steps, stateful_metrics=['loss'])
+        step += 1
         image, y_true_1, y_true_2, y_true_3 = inputs
         y_true = (y_true_1, y_true_2, y_true_3)
         loss = distributed_train_step(image, y_true)

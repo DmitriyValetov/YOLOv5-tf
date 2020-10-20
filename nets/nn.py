@@ -44,7 +44,7 @@ def csp_block(x, filters, n, residual=True):
     x = layers.Conv2D(filters, 1, 1, use_bias=False, kernel_initializer=initializer)(x)
     x = layers.concatenate([x, y])
     x = layers.BatchNormalization(momentum=0.03)(x)
-    x = layers.Activation(activation_fn)(x)
+    x = layers.LeakyReLU(0.1)(x)
 
     x = conv_block(x, 2 * filters, 1, 1)
     return x

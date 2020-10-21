@@ -9,28 +9,6 @@ from six import raise_from
 from utils import config
 
 
-def resize(image, boxes=None):
-    ih, iw = config.image_size, config.image_size
-    h, w, _ = image.shape
-
-    scale = min(iw / w, ih / h)
-    nw, nh = int(scale * w), int(scale * h)
-    image_resized = cv2.resize(image, (nw, nh))
-
-    image_padded = np.zeros(shape=[ih, iw, 3], dtype=np.uint8)
-    dw, dh = (iw - nw) // 2, (ih - nh) // 2
-    image_padded[dh:nh + dh, dw:nw + dw, :] = image_resized.copy()
-
-    if boxes is None:
-        return image_padded, dw, dh, scale
-
-    else:
-        boxes[:, [0, 2]] = boxes[:, [0, 2]] * scale + dw
-        boxes[:, [1, 3]] = boxes[:, [1, 3]] * scale + dh
-
-        return image_padded, boxes
-
-
 def find_node(parent, name, debug_name=None, parse=None):
     if debug_name is None:
         debug_name = name
@@ -96,7 +74,7 @@ def load_label(f_name):
 
 
 def random_horizontal_flip(image, boxes):
-    if np.random.random() < 0.5:
+    if np.random.random() > 0.7:
         _, w, _ = image.shape
         image = image[:, ::-1, :]
         boxes[:, [0, 2]] = w - boxes[:, [2, 0]]
@@ -104,49 +82,34 @@ def random_horizontal_flip(image, boxes):
     return image, boxes
 
 
-def random_crop(image, boxes):
-    if np.random.random() < 0.7:
-        h, w, _ = image.shape
-        max_bbox = np.concatenate([np.min(boxes[:, 0:2], axis=0), np.max(boxes[:, 2:4], axis=0)], axis=-1)
-
-        max_l_trans = max_bbox[0]
-        max_u_trans = max_bbox[1]
-        max_r_trans = w - max_bbox[2]
-        max_d_trans = h - max_bbox[3]
-
-        crop_x_min = max(0, int(max_bbox[0] - np.random.uniform(0, max_l_trans)))
-        crop_y_min = max(0, int(max_bbox[1] - np.random.uniform(0, max_u_trans)))
-        crop_x_max = max(w, int(max_bbox[2] + np.random.uniform(0, max_r_trans)))
-        crop_y_max = max(h, int(max_bbox[3] + np.random.uniform(0, max_d_trans)))
-
-        image = image[crop_y_min: crop_y_max, crop_x_min: crop_x_max]
-
-        boxes[:, [0, 2]] = boxes[:, [0, 2]] - crop_x_min
-        boxes[:, [1, 3]] = boxes[:, [1, 3]] - crop_y_min
-
-    return image, boxes
+def random_noise(image):
+    if np.random.random() > 0.5:
+        image = cv2.GaussianBlur(image, (5, 5), np.random.uniform(0, 2))
+    return image
 
 
-def random_translate(image, boxes):
-    if np.random.random() < 0.7:
-        h, w, _ = image.shape
-        max_bbox = np.concatenate([np.min(boxes[:, 0:2], axis=0), np.max(boxes[:, 2:4], axis=0)], axis=-1)
+def resize(image, boxes=None):
+    ih, iw = config.image_size, config.image_size
+    h, w, _ = image.shape
 
-        max_l_trans = max_bbox[0]
-        max_u_trans = max_bbox[1]
-        max_r_trans = w - max_bbox[2]
-        max_d_trans = h - max_bbox[3]
+    scale = min(iw / w, ih / h)
+    w = int(scale * w)
+    h = int(scale * h)
 
-        tx = np.random.uniform(-(max_l_trans - 1), (max_r_trans - 1))
-        ty = np.random.uniform(-(max_u_trans - 1), (max_d_trans - 1))
+    image_resized = cv2.resize(image, (w, h))
 
-        matrix = np.array([[1, 0, tx], [0, 1, ty]])
-        image = cv2.warpAffine(image, matrix, (w, h))
+    image_padded = np.zeros(shape=[ih, iw, 3], dtype=np.uint8)
+    dw, dh = (iw - w) // 2, (ih - h) // 2
+    image_padded[dh:h + dh, dw:w + dw, :] = image_resized.copy()
 
-        boxes[:, [0, 2]] = boxes[:, [0, 2]] + tx
-        boxes[:, [1, 3]] = boxes[:, [1, 3]] + ty
+    if boxes is None:
+        return image_padded, scale, dw, dh
 
-    return image, boxes
+    else:
+        boxes[:, [0, 2]] = boxes[:, [0, 2]] * scale + dw
+        boxes[:, [1, 3]] = boxes[:, [1, 3]] * scale + dh
+
+        return image_padded, boxes
 
 
 def process_box(boxes, labels):

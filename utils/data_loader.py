@@ -7,16 +7,14 @@ from utils import config
 from utils.util import load_image
 from utils.util import load_label
 from utils.util import process_box
-from utils.util import random_crop
 from utils.util import random_horizontal_flip
-from utils.util import random_translate
+from utils.util import random_noise
 from utils.util import resize
 
 
 class Generator(Sequence):
     def __init__(self, f_names):
         self.f_names = f_names
-        self.on_epoch_end()
 
     def __len__(self):
         return int(np.floor(len(self.f_names) / config.batch_size))
@@ -25,9 +23,10 @@ class Generator(Sequence):
         image = load_image(self.f_names[index])
         boxes, label = load_label(self.f_names[index])
         boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
+
+        image = random_noise(image)
+
         image, boxes = random_horizontal_flip(image, boxes)
-        image, boxes = random_crop(image, boxes)
-        image, boxes = random_translate(image, boxes)
         image, boxes = resize(image, boxes)
 
         image = image.astype(np.float32)
@@ -44,7 +43,7 @@ def input_fn(f_names):
         generator = OrderedEnqueuer(Generator(f_names), True)
         generator.start(workers=8, max_queue_size=10)
         while True:
-            image, y_true_1, y_true_2, y_true_3 = next(generator.get())
+            image, y_true_1, y_true_2, y_true_3 = generator.get().__next__()
             yield image, y_true_1, y_true_2, y_true_3
 
     output_types = (tf.float32, tf.float32, tf.float32, tf.float32)

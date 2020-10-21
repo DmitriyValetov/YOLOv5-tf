@@ -30,7 +30,7 @@ class Generator(Sequence):
         image, boxes = resize(image, boxes)
 
         image = image.astype(np.float32)
-        image = image / 255.
+        image = image / 255.0
         y_true_1, y_true_2, y_true_3 = process_box(boxes, label)
         return image, y_true_1, y_true_2, y_true_3
 

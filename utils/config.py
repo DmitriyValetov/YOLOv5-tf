@@ -1,35 +1,13 @@
 from os.path import join
-
 import numpy as np
 
-seed = 12345
 epochs = 300
 batch_size = 18
-max_boxes = 150
 image_size = 1024
-base_dir = join('..', 'Dataset', 'VOC2012')
+base_dir = join('..', 'Dataset', 'Dubai')
 image_dir = 'IMAGES'
 label_dir = 'LABELS'
-classes = {'aeroplane': 0,
-           'bicycle': 1,
-           'bird': 2,
-           'boat': 3,
-           'bottle': 4,
-           'bus': 5,
-           'car': 6,
-           'cat': 7,
-           'chair': 8,
-           'cow': 9,
-           'diningtable': 10,
-           'dog': 11,
-           'horse': 12,
-           'motorbike': 13,
-           'person': 14,
-           'pottedplant': 15,
-           'sheep': 16,
-           'sofa': 17,
-           'train': 18,
-           'tvmonitor': 19}
+classes = {'DAMAGE': 0}
 strides = [8, 16, 32]
 anchors = np.array([[9, 8], [12, 11], [14, 15],
                     [17, 8], [18, 24], [25, 13],

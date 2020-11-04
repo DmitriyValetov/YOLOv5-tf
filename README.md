@@ -1,4 +1,4 @@
-[YOLOV5](https://github.com/ultralytics/yolov5) implementation using TensorFlow 2
+[YOLOv5](https://github.com/ultralytics/yolov5) implementation using TensorFlow 2
 
 #### Train
 * Run `python generate.py` for generating anchors

@@ -15,12 +15,12 @@ def find_node(parent, name, debug_name=None, parse=None):
 
     result = parent.find(name)
     if result is None:
-        raise ValueError('missing element \'{}\''.format(debug_name))
+        raise ValueError(f'missing element \'{debug_name}\'')
     if parse is not None:
         try:
             return parse(result.text)
         except ValueError as e:
-            raise_from(ValueError('illegal value for \'{}\': {}'.format(debug_name, e)), None)
+            raise_from(ValueError(f'illegal value for \'{debug_name}\': {e}'), None)
     return result
 
 
@@ -30,7 +30,7 @@ def parse_annotation(element):
 
     class_name = find_node(element, 'name').text
     if class_name not in config.classes:
-        raise ValueError('class name \'{}\' not found in classes: {}'.format(class_name, list(config.classes.keys())))
+        raise ValueError(f'class name \'{class_name}\' not found in classes: {list(config.classes.keys())}')
 
     label = config.classes[class_name]
 
@@ -68,13 +68,13 @@ def load_label(f_name):
         tree = parse_fn(join(config.base_dir, config.label_dir, f_name + '.xml'))
         return parse_annotations(tree.getroot())
     except ParseError as error:
-        raise_from(ValueError('invalid annotations file: {}: {}'.format(f_name, error)), None)
+        raise_from(ValueError(f'invalid annotations file: {f_name}: {error}'), None)
     except ValueError as error:
-        raise_from(ValueError('invalid annotations file: {}: {}'.format(f_name, error)), None)
+        raise_from(ValueError(f'invalid annotations file: {f_name}: {error}'), None)
 
 
 def random_horizontal_flip(image, boxes):
-    if np.random.random() > 0.7:
+    if np.random.random() > 0.8:
         _, w, _ = image.shape
         image = image[:, ::-1, :]
         boxes[:, [0, 2]] = w - boxes[:, [2, 0]]
@@ -83,23 +83,22 @@ def random_horizontal_flip(image, boxes):
 
 
 def random_noise(image):
-    if np.random.random() > 0.5:
+    if np.random.random() > 0.6:
         image = cv2.GaussianBlur(image, (5, 5), np.random.uniform(0, 2))
     return image
 
 
 def resize(image, boxes=None):
-    ih, iw = config.image_size, config.image_size
     h, w, _ = image.shape
 
-    scale = min(iw / w, ih / h)
+    scale = min(config.image_size / w, config.image_size / h)
     w = int(scale * w)
     h = int(scale * h)
 
     image_resized = cv2.resize(image, (w, h))
 
-    image_padded = np.zeros(shape=[ih, iw, 3], dtype=np.uint8)
-    dw, dh = (iw - w) // 2, (ih - h) // 2
+    image_padded = np.zeros(shape=[config.image_size, config.image_size, 3], dtype=np.uint8)
+    dw, dh = (config.image_size - w) // 2, (config.image_size - h) // 2
     image_padded[dh:h + dh, dw:w + dw, :] = image_resized.copy()
 
     if boxes is None:

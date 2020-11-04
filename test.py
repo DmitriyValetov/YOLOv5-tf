@@ -42,7 +42,7 @@ def main():
         image = cv2.imread(image_path)
         image_np = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        image_np, dw, dh, scale = util.resize(image_np)
+        image_np, scale, dw, dh = util.resize(image_np)
         image_np = image_np.astype(np.float32) / 255.0
 
         boxes, scores, _ = model.predict(image_np[np.newaxis, ...])

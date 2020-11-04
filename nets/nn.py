@@ -86,13 +86,13 @@ def build_model(training=True):
     skip_3 = x
 
     x = conv_block(x, 640, 1)
-    x = layers.UpSampling2D(interpolation='bilinear')(x)
+    x = layers.UpSampling2D()(x)
     x = layers.concatenate([x, skip_2])
     x = csp_block(x, 640, 4, False)
     x = conv_block(x, 320, 1)
     skip_4 = x
 
-    x = layers.UpSampling2D(interpolation='bilinear')(x)
+    x = layers.UpSampling2D()(x)
     x = layers.concatenate([x, skip_1])
     x = csp_block(x, 320, 4, False)
     large = layers.Conv2D(3 * (len(config.classes) + 5), 1, kernel_initializer=initializer)(x)

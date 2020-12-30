@@ -68,7 +68,7 @@ class AnchorGenerator:
         f_names = [f_name[:-4] for f_name in os.listdir(join(config.base_dir, config.label_dir))]
         for f_name in f_names:
             annotations = load_label(f_name)
-            for annotation in annotations:
+            for annotation in annotations[0]:
                 x_min = annotation[0]
                 y_min = annotation[1]
                 x_max = annotation[2]

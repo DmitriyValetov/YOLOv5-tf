@@ -5,7 +5,6 @@ from os.path import join
 
 import numpy as np
 import tensorflow as tf
-
 from utils import config
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -19,21 +18,24 @@ from utils import data_loader
 
 strategy = tf.distribute.MirroredStrategy()
 
-f_names = []
+file_names = []
 with open(join(config.base_dir, 'train.txt')) as reader:
     for line in reader.readlines():
-        f_names.append(line.rstrip().split(' ')[0])
-
+        image_path = join(config.base_dir, config.image_dir, line.rstrip().split(' ')[0]+'.jpg')
+        label_path = join(config.base_dir, config.label_dir, line.rstrip().split(' ')[0]+'.xml')
+        if exists(image_path) and exists(label_path):
+            file_names.append(join(config.base_dir, 'TF', line.rstrip().split(' ')[0] + '.tf'))
+print(f'[INFO] {len(file_names)} data points')
 num_replicas = strategy.num_replicas_in_sync
-steps = len(f_names) // config.batch_size
+steps = len(file_names) // config.batch_size
 lr = nn.CosineLrSchedule(steps)
 
-nb_classes = len(config.classes)
-dataset = data_loader.input_fn(f_names)
+dataset = data_loader.DataLoader().input_fn(file_names)
 dataset = strategy.experimental_distribute_dataset(dataset)
 
 with strategy.scope():
     model = nn.build_model()
+    model.summary()
     optimizer = tf.keras.optimizers.Adam(lr, beta_1=0.935, decay=0.0005)
 
 with strategy.scope():
@@ -42,16 +44,16 @@ with strategy.scope():
 
     def compute_loss(y_true, y_pred):
         total_loss = loss_object(y_pred, y_true)
-        return tf.reduce_sum(total_loss) * 1.0 / num_replicas
+        return tf.reduce_sum(total_loss) / config.batch_size
 
 
 def train_step(image, y_true):
     with tf.GradientTape() as tape:
         y_pred = model(image, training=True)
         loss = compute_loss(y_true, y_pred)
-
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    variables = model.trainable_variables
+    gradients = tape.gradient(loss, variables)
+    optimizer.apply_gradients(zip(gradients, variables))
     return loss
 
 
@@ -67,7 +69,7 @@ def main():
     pb = tf.keras.utils.Progbar(steps, stateful_metrics=['loss'])
     for step, inputs in enumerate(dataset):
         if step % steps == 0:
-            print(f'Epoch {step // steps + 1}/{config.epochs}')
+            print(f'Epoch {step // steps + 1}/{config.num_epochs}')
             pb = tf.keras.utils.Progbar(steps, stateful_metrics=['loss'])
         step += 1
         image, y_true_1, y_true_2, y_true_3 = inputs
@@ -75,8 +77,8 @@ def main():
         loss = distributed_train_step(image, y_true)
         pb.add(1, [('loss', loss)])
         if step % steps == 0:
-            model.save_weights(join("weights", f"model{step // steps}.h5"))
-        if step // steps == config.epochs:
+            model.save_weights(join("weights", f"model_{config.version}.h5"))
+        if step // steps == config.num_epochs:
             sys.exit("--- Stop Training ---")
 
 

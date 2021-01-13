@@ -29,10 +29,10 @@ def parse_annotation(element):
     difficult = find_node(element, 'difficult', parse=int)
 
     class_name = find_node(element, 'name').text
-    if class_name not in config.classes:
-        raise ValueError(f'class name \'{class_name}\' not found in classes: {list(config.classes.keys())}')
+    if class_name not in config.class_dict:
+        raise ValueError(f'class name \'{class_name}\' not found in classes: {list(config.class_dict.keys())}')
 
-    label = config.classes[class_name]
+    label = config.class_dict[class_name]
 
     box = find_node(element, 'bndbox')
     x_min = find_node(box, 'xmin', 'bndbox.xmin', parse=int)
@@ -73,21 +73,6 @@ def load_label(f_name):
         raise_from(ValueError(f'invalid annotations file: {f_name}: {error}'), None)
 
 
-def random_horizontal_flip(image, boxes):
-    if np.random.random() > 0.8:
-        _, w, _ = image.shape
-        image = image[:, ::-1, :]
-        boxes[:, [0, 2]] = w - boxes[:, [2, 0]]
-
-    return image, boxes
-
-
-def random_noise(image):
-    if np.random.random() > 0.6:
-        image = cv2.GaussianBlur(image, (5, 5), np.random.uniform(0, 2))
-    return image
-
-
 def resize(image, boxes=None):
     h, w, _ = image.shape
 
@@ -117,9 +102,9 @@ def process_box(boxes, labels):
     box_centers = (boxes[:, 0:2] + boxes[:, 2:4]) / 2
     box_size = boxes[:, 2:4] - boxes[:, 0:2]
 
-    y_true_1 = np.zeros((config.image_size // 32, config.image_size // 32, 3, 6 + len(config.classes)), np.float32)
-    y_true_2 = np.zeros((config.image_size // 16, config.image_size // 16, 3, 6 + len(config.classes)), np.float32)
-    y_true_3 = np.zeros((config.image_size // 8, config.image_size // 8, 3, 6 + len(config.classes)), np.float32)
+    y_true_1 = np.zeros((config.image_size // 32, config.image_size // 32, 3, 6 + len(config.class_dict)), np.float32)
+    y_true_2 = np.zeros((config.image_size // 16, config.image_size // 16, 3, 6 + len(config.class_dict)), np.float32)
+    y_true_3 = np.zeros((config.image_size // 8, config.image_size // 8, 3, 6 + len(config.class_dict)), np.float32)
 
     y_true_1[..., -1] = 1.
     y_true_2[..., -1] = 1.

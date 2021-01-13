@@ -1,10 +1,17 @@
+import multiprocessing
 import os
+from multiprocessing import Process
+from multiprocessing import cpu_count
+from os.path import exists
 from os.path import join
 
 import numpy as np
+import tqdm
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
 from utils import config
-from utils.util import load_label
+from utils import util
 
 
 class AnchorGenerator:
@@ -65,10 +72,9 @@ class AnchorGenerator:
     @staticmethod
     def get_boxes():
         boxes = []
-        f_names = [f_name[:-4] for f_name in os.listdir(join(config.base_dir, config.label_dir))]
-        for f_name in f_names:
-            annotations = load_label(f_name)
-            for annotation in annotations[0]:
+        file_names = [file_name[:-4] for file_name in os.listdir(join(config.base_dir, config.label_dir))]
+        for file_name in file_names:
+            for annotation in util.load_label(file_name)[0]:
                 x_min = annotation[0]
                 y_min = annotation[1]
                 x_max = annotation[2]
@@ -79,6 +85,80 @@ class AnchorGenerator:
         return np.array(boxes)
 
 
+def byte_feature(value):
+    if not isinstance(value, bytes):
+        if not isinstance(value, list):
+            value = value.encode('utf-8')
+        else:
+            value = [val.encode('utf-8') for val in value]
+    if not isinstance(value, list):
+        value = [value]
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
+
+
+def build_example(file_name):
+    in_image = util.load_image(file_name)
+    boxes, label = util.load_label(file_name)
+    boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
+
+    in_image, boxes = util.resize(in_image, boxes)
+
+    y_true_1, y_true_2, y_true_3 = util.process_box(boxes, label)
+
+    in_image = in_image.astype('float32')
+    y_true_1 = y_true_1.astype('float32')
+    y_true_2 = y_true_2.astype('float32')
+    y_true_3 = y_true_3.astype('float32')
+
+    in_image = in_image.tobytes()
+    y_true_1 = y_true_1.tobytes()
+    y_true_2 = y_true_2.tobytes()
+    y_true_3 = y_true_3.tobytes()
+
+    features = tf.train.Features(feature={'in_image': byte_feature(in_image),
+                                          'y_true_1': byte_feature(y_true_1),
+                                          'y_true_2': byte_feature(y_true_2),
+                                          'y_true_3': byte_feature(y_true_3)})
+
+    return tf.train.Example(features=features)
+
+
+def write_tf_record(queue, sentinel):
+    while True:
+        file_name = queue.get()
+
+        if file_name == sentinel:
+            break
+        tf_example = build_example(file_name)
+        opt = tf.io.TFRecordOptions('GZIP')
+        with tf.io.TFRecordWriter(join(config.base_dir, 'TF', file_name + ".tf"), opt) as writer:
+            writer.write(tf_example.SerializeToString())
+
+
+def generate_tf_record():
+    if not exists(join(config.base_dir, 'TF')):
+        os.makedirs(join(config.base_dir, 'TF'))
+    file_names = []
+    with open(join(config.base_dir, 'train.txt')) as reader:
+        for line in reader.readlines():
+            file_names.append(line.rstrip().split(' ')[0])
+    sentinel = ("", [])
+    queue = multiprocessing.Manager().Queue()
+    for file_name in tqdm.tqdm(file_names):
+        queue.put(file_name)
+    for _ in range(cpu_count()):
+        queue.put(sentinel)
+    print('[INFO] generating TF record')
+    process_pool = []
+    for i in range(cpu_count()):
+        process = Process(target=write_tf_record, args=(queue, sentinel))
+        process_pool.append(process)
+        process.start()
+    for process in process_pool:
+        process.join()
+
+
 if __name__ == "__main__":
     generator = AnchorGenerator(9)
     generator.generate_anchor()
+    generate_tf_record()

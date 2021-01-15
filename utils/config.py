@@ -5,8 +5,8 @@ width = [0.5, 0.75, 1.0, 1.25]
 depth = [0.33, 0.67, 1.0, 1.33]
 versions = ['s', 'm', 'l', 'x']
 
-num_epochs = 100
-batch_size = 96
+num_epochs = 300
+batch_size = 90
 image_size = 640
 class_dict = {'person': 0, 'bicycle': 1, 'car': 2, 'motorcycle': 3, 'airplane': 4, 'bus': 5, 'train': 6, 'truck': 7,
               'boat': 8, 'traffic light': 9, 'fire': 10, 'hydrant': 11, 'stop sign': 12, 'parking meter': 13,

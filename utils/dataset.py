@@ -46,7 +46,7 @@ def input_fn(file_names):
     output_shapes = ((config.image_size, config.image_size, 3),
                      (config.image_size // 32, config.image_size // 32, 3, len(config.class_dict) + 6),
                      (config.image_size // 16, config.image_size // 16, 3, len(config.class_dict) + 6),
-                     (config.image_size // 8,  config.image_size // 8,  3, len(config.class_dict) + 6))
+                     (config.image_size // 8,  config.image_size // 8,  3,  len(config.class_dict) + 6))
 
     dataset = tf.data.Dataset.from_generator(generator=generator_fn,
                                              output_types=output_types,
@@ -80,7 +80,7 @@ class DataLoader:
         y_true_2 = tf.reshape(y_true_2, (config.image_size // 16, config.image_size // 16, 3, 6 + len(config.class_dict)))
 
         y_true_3 = tf.io.decode_raw(features['y_true_3'], tf.float32)
-        y_true_3 = tf.reshape(y_true_3, (config.image_size // 8,  config.image_size //  8, 3, 6 + len(config.class_dict)))
+        y_true_3 = tf.reshape(y_true_3, (config.image_size // 8,  config.image_size // 8, 3,  6 + len(config.class_dict)))
 
         return in_image, y_true_1, y_true_2, y_true_3
 
@@ -90,5 +90,5 @@ class DataLoader:
         dataset = dataset.cache(os.path.join(config.base_dir, 'train'))
         dataset = dataset.repeat(config.num_epochs + 1)
         dataset = dataset.batch(config.batch_size)
-        dataset = dataset.prefetch(3 * config.batch_size)
+        dataset = dataset.prefetch(2 * config.batch_size)
         return dataset

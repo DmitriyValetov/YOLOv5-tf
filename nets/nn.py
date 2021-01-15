@@ -82,19 +82,19 @@ def build_model(training=True):
     x = layers.UpSampling2D()(x)
     x = layers.concatenate([x, x1])
     x = csp(x, int(round(width * 256)), int(round(depth * 3)), False)
-    p3 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name = f'p3_{len(config.class_dict)}', 
+    p3 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p3_{len(config.class_dict)}',
                        kernel_initializer=initializer)(x)
 
     x = conv(x, int(round(width * 256)), 3, 2)
     x = layers.concatenate([x, x4])
     x = csp(x, int(round(width * 512)), int(round(depth * 3)), False)
-    p4 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name = f'p4_{len(config.class_dict)}', 
+    p4 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p4_{len(config.class_dict)}',
                        kernel_initializer=initializer)(x)
 
     x = conv(x, int(round(width * 512)), 3, 2)
     x = layers.concatenate([x, x3])
     x = csp(x, int(round(width * 1024)), int(round(depth * 3)), False)
-    p5 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name = f'p5_{len(config.class_dict)}',
+    p5 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p5_{len(config.class_dict)}',
                        kernel_initializer=initializer)(x)
 
     if training:
@@ -287,39 +287,27 @@ def process_loss(feature_map_i, y_true, anchors):
     class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_target, logits=pred_prob) * mix_w
     class_loss = tf.reduce_sum(class_loss)
 
-    return xy_loss, wh_loss, conf_loss, class_loss
+    return xy_loss + wh_loss + conf_loss + class_loss
 
 
 def compute_loss(y_pred, y_true):
-    loss_xy, loss_wh, loss_conf, loss_class = 0., 0., 0., 0.
+    loss = 0.
     anchor_group = [config.anchors[6:9], config.anchors[3:6], config.anchors[0:3]]
 
     for i in range(len(y_pred)):
-        result = process_loss(y_pred[i], y_true[i], anchor_group[i])
-        loss_xy += result[0]
-        loss_wh += result[1]
-        loss_conf += result[2]
-        loss_class += result[3]
-    return loss_xy + loss_wh + loss_conf + loss_class
+        loss += process_loss(y_pred[i], y_true[i], anchor_group[i])
+    return loss
 
 
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, warmup_step):
+    def __init__(self, steps):
         super().__init__()
-        self.lr_min = 1e-4
-        self.lr_max = 1e-3
-        self.warmup_step = warmup_step
-        self.decay_steps = tf.cast(warmup_step * (config.num_epochs - 1), tf.float32)
+        self.adjusted_lr = 0.008 * config.batch_size / 64
+        self.lr_warmup_init = 0.0008
+        self.lr_warmup_step = steps
+        self.decay_steps = tf.cast((config.num_epochs - 1) * self.lr_warmup_step, tf.float32)
 
     def __call__(self, step):
-        cos = tf.cos(math.pi * (tf.cast(step, tf.float32) - self.warmup_step) / self.decay_steps)
-        linear_warmup = tf.cast(step, dtype=tf.float32) / self.warmup_step * self.lr_max
-        cos_lr = self.lr_min + 0.5 * (self.lr_max - self.lr_min) * (1 + cos / self.decay_steps)
-
-        return tf.where(step < self.warmup_step, linear_warmup, cos_lr)
-
-    def get_config(self):
-        return {"lr_min": self.lr_min,
-                "lr_max": self.lr_max,
-                "decay_steps": self.decay_steps,
-                "lr_warmup_step": self.warmup_step}
+        linear_warmup = tf.cast(step, dtype=tf.float32) / self.lr_warmup_step * (self.adjusted_lr - self.lr_warmup_init)
+        cosine_lr = 0.5 * self.adjusted_lr * (1 + tf.cos(math.pi * tf.cast(step, tf.float32) / self.decay_steps))
+        return tf.where(step < self.lr_warmup_step, self.lr_warmup_init + linear_warmup, cosine_lr)

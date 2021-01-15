@@ -7,36 +7,32 @@ import numpy as np
 import tensorflow as tf
 from utils import config
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+from nets import nn
+from utils.dataset import DataLoader
 
 np.random.seed(12345)
 tf.random.set_seed(12345)
-
-from nets import nn
-from utils import data_loader
 
 strategy = tf.distribute.MirroredStrategy()
 
 file_names = []
 with open(join(config.base_dir, 'train.txt')) as reader:
     for line in reader.readlines():
-        image_path = join(config.base_dir, config.image_dir, line.rstrip().split(' ')[0]+'.jpg')
-        label_path = join(config.base_dir, config.label_dir, line.rstrip().split(' ')[0]+'.xml')
+        image_path = join(config.base_dir, config.image_dir, line.rstrip().split(' ')[0] + '.jpg')
+        label_path = join(config.base_dir, config.label_dir, line.rstrip().split(' ')[0] + '.xml')
         if exists(image_path) and exists(label_path):
             file_names.append(join(config.base_dir, 'TF', line.rstrip().split(' ')[0] + '.tf'))
 print(f'[INFO] {len(file_names)} data points')
 num_replicas = strategy.num_replicas_in_sync
 steps = len(file_names) // config.batch_size
-lr = nn.CosineLrSchedule(steps)
 
-dataset = data_loader.DataLoader().input_fn(file_names)
+dataset = DataLoader().input_fn(file_names)
 dataset = strategy.experimental_distribute_dataset(dataset)
 
 with strategy.scope():
     model = nn.build_model()
     model.summary()
-    optimizer = tf.keras.optimizers.Adam(lr, beta_1=0.935, decay=0.0005)
+    optimizer = tf.keras.optimizers.Adam(nn.CosineLrSchedule(steps), beta_1=0.9)
 
 with strategy.scope():
     loss_object = nn.compute_loss

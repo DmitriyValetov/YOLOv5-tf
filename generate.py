@@ -6,10 +6,9 @@ from os.path import exists
 from os.path import join
 
 import numpy as np
+import tensorflow as tf
 import tqdm
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
 from utils import config
 from utils import util
 

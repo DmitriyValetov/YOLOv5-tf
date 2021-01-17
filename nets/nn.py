@@ -302,7 +302,7 @@ class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
 
 class Predict(layers.Layer):
     def __init__(self):
-        super(Predict, self).__init__()
+        super().__init__()
 
     def call(self, inputs, **kwargs):
         y_pred = [(inputs[0], config.anchors[6:9]),

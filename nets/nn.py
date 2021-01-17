@@ -7,14 +7,16 @@ from tensorflow.keras import layers
 from utils import config
 
 initializer = tf.random_normal_initializer(stddev=0.01)
+l2 = tf.keras.regularizers.l2(0.0005)
 
 
 def activation_fn(x):
     return nn.swish(x)
 
 
-def conv(inputs, filters, kernel_size=1, strides=1):
-    x = layers.Conv2D(filters, kernel_size, strides, 'same', use_bias=False, kernel_initializer=initializer)(inputs)
+def conv(x, filters, kernel_size=1, strides=1):
+    x = layers.Conv2D(filters, kernel_size, strides, 'same', use_bias=False,
+                      kernel_initializer=initializer, kernel_regularizer=l2)(x)
     x = layers.BatchNormalization(momentum=0.03)(x)
     x = layers.Activation(activation_fn)(x)
     return x
@@ -83,19 +85,19 @@ def build_model(training=True):
     x = layers.concatenate([x, x1])
     x = csp(x, int(round(width * 256)), int(round(depth * 3)), False)
     p3 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p3_{len(config.class_dict)}',
-                       kernel_initializer=initializer)(x)
+                       kernel_initializer=initializer, kernel_regularizer=l2)(x)
 
     x = conv(x, int(round(width * 256)), 3, 2)
     x = layers.concatenate([x, x4])
     x = csp(x, int(round(width * 512)), int(round(depth * 3)), False)
     p4 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p4_{len(config.class_dict)}',
-                       kernel_initializer=initializer)(x)
+                       kernel_initializer=initializer, kernel_regularizer=l2)(x)
 
     x = conv(x, int(round(width * 512)), 3, 2)
     x = layers.concatenate([x, x3])
     x = csp(x, int(round(width * 1024)), int(round(depth * 3)), False)
     p5 = layers.Conv2D(3 * (len(config.class_dict) + 5), 1, name=f'p5_{len(config.class_dict)}',
-                       kernel_initializer=initializer)(x)
+                       kernel_initializer=initializer, kernel_regularizer=l2)(x)
 
     if training:
         return tf.keras.Model(inputs, [p5, p4, p3])
@@ -147,10 +149,9 @@ def predict(feature_maps):
     feature_map_anchors = [(feature_map_1, config.anchors[6:9]),
                            (feature_map_2, config.anchors[3:6]),
                            (feature_map_3, config.anchors[0:3])]
-    reorg_results = [process_layer(feature_map, anchors) for (feature_map, anchors) in feature_map_anchors]
 
     boxes_list, conf_list, prob_list = [], [], []
-    for result in reorg_results:
+    for result in [process_layer(feature_map, anchors) for (feature_map, anchors) in feature_map_anchors]:
         box, conf, prob = reshape(result)
         boxes_list.append(box)
         conf_list.append(tf.sigmoid(conf))
@@ -220,83 +221,85 @@ def box_iou(pred_boxes, valid_true_boxes):
     return iou
 
 
-def process_loss(feature_map_i, y_true, anchors):
-    grid_size = tf.shape(feature_map_i)[1:3]
-    ratio = tf.cast(tf.constant([config.image_size, config.image_size]) / grid_size, tf.float32)
-    batch_size = tf.cast(tf.shape(feature_map_i)[0], tf.float32)
+class ComputeLoss(object):
+    def __init__(self):
+        super().__init__()
 
-    x_y_offset, pred_boxes, pred_conf, pred_prob = process_layer(feature_map_i, anchors)
+    @staticmethod
+    def compute_loss(feature_map_i, y_true, anchors):
+        grid_size = tf.shape(feature_map_i)[1:3]
+        ratio = tf.cast(tf.constant([config.image_size, config.image_size]) / grid_size, tf.float32)
+        batch_size = tf.cast(tf.shape(feature_map_i)[0], tf.float32)
 
-    object_mask = y_true[..., 4:5]
+        x_y_offset, pred_boxes, pred_conf, pred_prob = process_layer(feature_map_i, anchors)
 
-    def loop_cond(idx, _):
-        return tf.less(idx, tf.cast(batch_size, tf.int32))
+        object_mask = y_true[..., 4:5]
 
-    def loop_body(idx, mask):
-        valid_true_boxes = tf.boolean_mask(y_true[idx, ..., 0:4], tf.cast(object_mask[idx, ..., 0], 'bool'))
-        iou = box_iou(pred_boxes[idx], valid_true_boxes)
-        best_iou = tf.reduce_max(iou, axis=-1)
-        ignore_mask_tmp = tf.cast(best_iou < 0.5, tf.float32)
-        mask = mask.write(idx, ignore_mask_tmp)
-        return idx + 1, mask
+        def loop_cond(idx, _):
+            return tf.less(idx, tf.cast(batch_size, tf.int32))
 
-    ignore_mask = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+        def loop_body(idx, mask):
+            valid_true_boxes = tf.boolean_mask(y_true[idx, ..., 0:4], tf.cast(object_mask[idx, ..., 0], 'bool'))
+            iou = box_iou(pred_boxes[idx], valid_true_boxes)
+            best_iou = tf.reduce_max(iou, axis=-1)
+            ignore_mask_tmp = tf.cast(best_iou < 0.5, tf.float32)
+            mask = mask.write(idx, ignore_mask_tmp)
+            return idx + 1, mask
 
-    _, ignore_mask = tf.while_loop(cond=loop_cond, body=loop_body, loop_vars=[0, ignore_mask])
-    ignore_mask = ignore_mask.stack()
-    ignore_mask = tf.expand_dims(ignore_mask, -1)
+        ignore_mask = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
-    pred_box_xy = pred_boxes[..., 0:2]
-    pred_box_wh = pred_boxes[..., 2:4]
+        _, ignore_mask = tf.while_loop(cond=loop_cond, body=loop_body, loop_vars=[0, ignore_mask])
+        ignore_mask = ignore_mask.stack()
+        ignore_mask = tf.expand_dims(ignore_mask, -1)
 
-    true_xy = y_true[..., 0:2] / ratio[::-1] - x_y_offset
-    pred_xy = pred_box_xy / ratio[::-1] - x_y_offset
+        pred_box_xy = pred_boxes[..., 0:2]
+        pred_box_wh = pred_boxes[..., 2:4]
 
-    true_tw_th = y_true[..., 2:4] / anchors
-    pred_tw_th = pred_box_wh / anchors
-    true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)
-    pred_tw_th = tf.where(condition=tf.equal(pred_tw_th, 0), x=tf.ones_like(pred_tw_th), y=pred_tw_th)
-    true_tw_th = tf.math.log(tf.clip_by_value(true_tw_th, 1e-9, 1e9))
-    pred_tw_th = tf.math.log(tf.clip_by_value(pred_tw_th, 1e-9, 1e9))
+        true_xy = y_true[..., 0:2] / ratio[::-1] - x_y_offset
+        pred_xy = pred_box_xy / ratio[::-1] - x_y_offset
 
-    box_loss_scale_1 = y_true[..., 2:3] / tf.cast(tf.constant([config.image_size, config.image_size])[1], tf.float32)
-    box_loss_scale_2 = y_true[..., 3:4] / tf.cast(tf.constant([config.image_size, config.image_size])[0], tf.float32)
+        true_tw_th = y_true[..., 2:4] / anchors
+        pred_tw_th = pred_box_wh / anchors
+        true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)
+        pred_tw_th = tf.where(condition=tf.equal(pred_tw_th, 0), x=tf.ones_like(pred_tw_th), y=pred_tw_th)
+        true_tw_th = tf.math.log(tf.clip_by_value(true_tw_th, 1e-9, 1e9))
+        pred_tw_th = tf.math.log(tf.clip_by_value(pred_tw_th, 1e-9, 1e9))
 
-    box_loss_scale = 2. - box_loss_scale_1 * box_loss_scale_2
+        box_loss_scale_1 = y_true[..., 2:3] / tf.cast(tf.constant([config.image_size, config.image_size])[1],
+                                                      tf.float32)
+        box_loss_scale_2 = y_true[..., 3:4] / tf.cast(tf.constant([config.image_size, config.image_size])[0],
+                                                      tf.float32)
 
-    mix_w = y_true[..., -1:]
-    xy_loss = tf.reduce_sum(tf.square(true_xy - pred_xy) * object_mask * box_loss_scale * mix_w)
-    wh_loss = tf.reduce_sum(tf.square(true_tw_th - pred_tw_th) * object_mask * box_loss_scale * mix_w)
+        box_loss_scale = 2. - box_loss_scale_1 * box_loss_scale_2
 
-    conf_pos_mask = object_mask
-    conf_neg_mask = (1 - object_mask) * ignore_mask
-    conf_loss_pos = conf_pos_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
-    conf_loss_neg = conf_neg_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
-    conf_loss = conf_loss_pos + conf_loss_neg
+        mix_w = y_true[..., -1:]
+        xy_loss = tf.reduce_sum(tf.square(true_xy - pred_xy) * object_mask * box_loss_scale * mix_w)
+        wh_loss = tf.reduce_sum(tf.square(true_tw_th - pred_tw_th) * object_mask * box_loss_scale * mix_w)
 
-    alpha = 0.25
-    gamma = 1.5
-    focal_mask = alpha * tf.pow(tf.abs(object_mask - tf.sigmoid(pred_conf)), gamma)
-    conf_loss *= focal_mask
+        conf_pos_mask = object_mask
+        conf_neg_mask = (1 - object_mask) * ignore_mask
+        conf_loss_pos = conf_pos_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
+        conf_loss_neg = conf_neg_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
 
-    conf_loss = tf.reduce_sum(conf_loss * mix_w)
+        conf_loss = conf_loss_pos + conf_loss_neg
+        conf_loss = tf.reduce_sum(conf_loss * mix_w)
 
-    delta = 0.01
-    label_target = (1 - delta) * y_true[..., 5:-1] + delta * 1. / len(config.class_dict)
+        delta = 0.01
+        label_target = (1 - delta) * y_true[..., 5:-1] + delta * 1. / len(config.class_dict)
 
-    class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_target, logits=pred_prob) * mix_w
-    class_loss = tf.reduce_sum(class_loss)
+        class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_target,
+                                                                           logits=pred_prob) * mix_w
+        class_loss = tf.reduce_sum(class_loss)
 
-    return xy_loss + wh_loss + conf_loss + class_loss
+        return xy_loss + wh_loss + conf_loss + class_loss
 
+    def __call__(self, y_pred, y_true):
+        loss = 0.
+        anchor_group = [config.anchors[6:9], config.anchors[3:6], config.anchors[0:3]]
 
-def compute_loss(y_pred, y_true):
-    loss = 0.
-    anchor_group = [config.anchors[6:9], config.anchors[3:6], config.anchors[0:3]]
-
-    for i in range(len(y_pred)):
-        loss += process_loss(y_pred[i], y_true[i], anchor_group[i])
-    return loss
+        for i in range(len(y_pred)):
+            loss += self.compute_loss(y_pred[i], y_true[i], anchor_group[i])
+        return loss
 
 
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):

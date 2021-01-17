@@ -32,10 +32,10 @@ dataset = strategy.experimental_distribute_dataset(dataset)
 with strategy.scope():
     model = nn.build_model()
     model.summary()
-    optimizer = tf.keras.optimizers.Adam(nn.CosineLrSchedule(steps), beta_1=0.9)
+    optimizer = tf.keras.optimizers.Adam(nn.CosineLrSchedule(steps), 0.937)
 
 with strategy.scope():
-    loss_object = nn.compute_loss
+    loss_object = nn.ComputeLoss()
 
 
     def compute_loss(y_true, y_pred):

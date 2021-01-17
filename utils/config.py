@@ -4,6 +4,8 @@ import numpy as np
 width = [0.5, 0.75, 1.0, 1.25]
 depth = [0.33, 0.67, 1.0, 1.33]
 versions = ['s', 'm', 'l', 'x']
+max_boxes = 150
+score_threshold = 0.25
 
 num_epochs = 300
 batch_size = 90

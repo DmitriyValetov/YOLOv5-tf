@@ -2,7 +2,7 @@ import math
 
 import tensorflow as tf
 from tensorflow import nn
-from tensorflow.keras import layers
+from tensorflow.keras import backend, layers
 
 from utils import config
 
@@ -102,7 +102,7 @@ def build_model(training=True):
     if training:
         return tf.keras.Model(inputs, [p5, p4, p3])
     else:
-        return tf.keras.Model(inputs, predict([p5, p4, p3]))
+        return tf.keras.Model(inputs, Predict()([p5, p4, p3]))
 
 
 def process_layer(feature_map, anchors):
@@ -134,68 +134,6 @@ def process_layer(feature_map, anchors):
     return x_y_offset, boxes, conf, prob
 
 
-def reshape(features):
-    x_y_offset, boxes, conf, prob = features
-    grid_size = tf.shape(x_y_offset)[:2]
-    boxes = tf.reshape(boxes, [-1, grid_size[0] * grid_size[1] * 3, 4])
-    conf = tf.reshape(conf, [-1, grid_size[0] * grid_size[1] * 3, 1])
-    prob = tf.reshape(prob, [-1, grid_size[0] * grid_size[1] * 3, len(config.class_dict)])
-    return boxes, conf, prob
-
-
-def predict(feature_maps):
-    feature_map_1, feature_map_2, feature_map_3 = feature_maps
-
-    feature_map_anchors = [(feature_map_1, config.anchors[6:9]),
-                           (feature_map_2, config.anchors[3:6]),
-                           (feature_map_3, config.anchors[0:3])]
-
-    boxes_list, conf_list, prob_list = [], [], []
-    for result in [process_layer(feature_map, anchors) for (feature_map, anchors) in feature_map_anchors]:
-        box, conf, prob = reshape(result)
-        boxes_list.append(box)
-        conf_list.append(tf.sigmoid(conf))
-        prob_list.append(tf.sigmoid(prob))
-
-    boxes = tf.concat(boxes_list, axis=1)
-    conf = tf.concat(conf_list, axis=1)
-    prob = tf.concat(prob_list, axis=1)
-
-    center_x, center_y, width, height = tf.split(boxes, [1, 1, 1, 1], axis=-1)
-    x_min = center_x - width / 2
-    y_min = center_y - height / 2
-    x_max = center_x + width / 2
-    y_max = center_y + height / 2
-
-    boxes = tf.concat([x_min, y_min, x_max, y_max], axis=-1)
-    return gpu_nms(boxes, conf * prob, len(config.class_dict))
-
-
-def gpu_nms(boxes, scores, num_classes, max_boxes=150, score_thresh=1e-5, nms_thresh=0.5):
-    boxes_list, label_list, score_list = [], [], []
-    max_boxes = tf.constant(max_boxes, dtype='int32')
-
-    boxes = tf.reshape(boxes, [-1, 4])
-    score = tf.reshape(scores, [-1, num_classes])
-
-    mask = tf.greater_equal(score, tf.constant(score_thresh))
-    for i in range(num_classes):
-        filter_boxes = tf.boolean_mask(boxes, mask[:, i])
-        filter_score = tf.boolean_mask(score[:, i], mask[:, i])
-        nms_indices = tf.image.non_max_suppression(boxes=filter_boxes,
-                                                   scores=filter_score,
-                                                   max_output_size=max_boxes,
-                                                   iou_threshold=nms_thresh, name='nms_indices')
-        label_list.append(tf.ones_like(tf.gather(filter_score, nms_indices), 'int32') * i)
-        boxes_list.append(tf.gather(filter_boxes, nms_indices))
-        score_list.append(tf.gather(filter_score, nms_indices))
-
-    boxes = tf.concat(boxes_list, axis=0)
-    score = tf.concat(score_list, axis=0)
-    label = tf.concat(label_list, axis=0)
-    return boxes, score, label
-
-
 def box_iou(pred_boxes, valid_true_boxes):
     pred_box_xy = pred_boxes[..., 0:2]
     pred_box_wh = pred_boxes[..., 2:4]
@@ -219,6 +157,52 @@ def box_iou(pred_boxes, valid_true_boxes):
     iou = intersect_area / (pred_box_area + true_box_area - intersect_area + 1e-10)
 
     return iou
+
+
+def compute_nms(args):
+    boxes, classification = args
+
+    def nms_fn(score, label):
+        score_indices = tf.where(backend.greater(score, config.score_threshold))
+
+        filtered_boxes = tf.gather_nd(boxes, score_indices)
+        filtered_scores = backend.gather(score, score_indices)[:, 0]
+
+        nms_indices = tf.image.non_max_suppression(filtered_boxes, filtered_scores, config.max_boxes)
+        score_indices = backend.gather(score_indices, nms_indices)
+
+        label = tf.gather_nd(label, score_indices)
+        score_indices = backend.stack([score_indices[:, 0], label], axis=1)
+
+        return score_indices
+
+    all_indices = []
+    for c in range(int(classification.shape[1])):
+        scores = classification[:, c]
+        labels = c * tf.ones((backend.shape(scores)[0],), dtype='int64')
+        all_indices.append(nms_fn(scores, labels))
+    indices = backend.concatenate(all_indices, axis=0)
+
+    scores = tf.gather_nd(classification, indices)
+    labels = indices[:, 1]
+    scores, top_indices = tf.nn.top_k(scores, k=backend.minimum(config.max_boxes, backend.shape(scores)[0]))
+
+    indices = backend.gather(indices[:, 0], top_indices)
+    boxes = backend.gather(boxes, indices)
+    labels = backend.gather(labels, top_indices)
+
+    pad_size = backend.maximum(0, config.max_boxes - backend.shape(scores)[0])
+
+    boxes = tf.pad(boxes, [[0, pad_size], [0, 0]], constant_values=-1)
+    scores = tf.pad(scores, [[0, pad_size]], constant_values=-1)
+    labels = tf.pad(labels, [[0, pad_size]], constant_values=-1)
+    labels = backend.cast(labels, 'int32')
+
+    boxes.set_shape([config.max_boxes, 4])
+    scores.set_shape([config.max_boxes])
+    labels.set_shape([config.max_boxes])
+
+    return [boxes, scores, labels]
 
 
 class ComputeLoss(object):
@@ -314,3 +298,54 @@ class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
         linear_warmup = tf.cast(step, dtype=tf.float32) / self.lr_warmup_step * (self.adjusted_lr - self.lr_warmup_init)
         cosine_lr = 0.5 * self.adjusted_lr * (1 + tf.cos(math.pi * tf.cast(step, tf.float32) / self.decay_steps))
         return tf.where(step < self.lr_warmup_step, self.lr_warmup_init + linear_warmup, cosine_lr)
+
+
+class Predict(layers.Layer):
+    def __init__(self):
+        super().__init__()
+
+    def call(self, inputs, **kwargs):
+        y_pred = [(inputs[0], config.anchors[6:9]),
+                  (inputs[1], config.anchors[3:6]),
+                  (inputs[2], config.anchors[0:3])]
+
+        boxes_list, conf_list, prob_list = [], [], []
+        for result in [process_layer(feature_map, anchors) for (feature_map, anchors) in y_pred]:
+            x_y_offset, box, conf, prob = result
+            grid_size = tf.shape(x_y_offset)[:2]
+            box = tf.reshape(box, [-1, grid_size[0] * grid_size[1] * 3, 4])
+            conf = tf.reshape(conf, [-1, grid_size[0] * grid_size[1] * 3, 1])
+            prob = tf.reshape(prob, [-1, grid_size[0] * grid_size[1] * 3, len(config.class_dict)])
+            boxes_list.append(box)
+            conf_list.append(tf.sigmoid(conf))
+            prob_list.append(tf.sigmoid(prob))
+
+        boxes = tf.concat(boxes_list, axis=1)
+        conf = tf.concat(conf_list, axis=1)
+        prob = tf.concat(prob_list, axis=1)
+
+        center_x, center_y, w, h = tf.split(boxes, [1, 1, 1, 1], axis=-1)
+        x_min = center_x - w / 2
+        y_min = center_y - h / 2
+        x_max = center_x + w / 2
+        y_max = center_y + h / 2
+
+        boxes = tf.concat([x_min, y_min, x_max, y_max], axis=-1)
+
+        outputs = tf.map_fn(fn=compute_nms,
+                            elems=[boxes, conf * prob],
+                            dtype=['float32', 'float32', 'int32'],
+                            parallel_iterations=100)
+
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        return [(input_shape[0][0], config.max_boxes, 4),
+                (input_shape[1][0], config.max_boxes),
+                (input_shape[1][0], config.max_boxes), ]
+
+    def compute_mask(self, inputs, mask=None):
+        return (len(inputs) + 1) * [None]
+
+    def get_config(self):
+        return super(Predict, self).get_config()

@@ -154,9 +154,7 @@ def box_iou(pred_boxes, valid_true_boxes):
     true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]
     true_box_area = tf.expand_dims(true_box_area, axis=0)
 
-    iou = intersect_area / (pred_box_area + true_box_area - intersect_area + 1e-10)
-
-    return iou
+    return intersect_area / (pred_box_area + true_box_area - intersect_area + 1e-10)
 
 
 def compute_nms(args):
@@ -289,8 +287,8 @@ class ComputeLoss(object):
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
     def __init__(self, steps):
         super().__init__()
-        self.adjusted_lr = 0.008 * config.batch_size / 64
-        self.lr_warmup_init = 0.0008
+        self.adjusted_lr = 0.001 * config.batch_size / 64
+        self.lr_warmup_init = 0.0001
         self.lr_warmup_step = steps
         self.decay_steps = tf.cast((config.num_epochs - 1) * self.lr_warmup_step, tf.float32)
 
@@ -348,4 +346,4 @@ class Predict(layers.Layer):
         return (len(inputs) + 1) * [None]
 
     def get_config(self):
-        return super(Predict, self).get_config()
+        return super().get_config()

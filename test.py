@@ -15,7 +15,7 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 def draw_bbox(image, boxes, scores):
     for box, score in zip(boxes, scores):
-        if score > 0.3:
+        if score > 0.25:
             coordinate = np.array(box[:4], dtype=np.int32)
             c1, c2 = (coordinate[0], coordinate[1]), (coordinate[2], coordinate[3])
             cv2.rectangle(image, c1, c2, (255, 0, 0), 1)
@@ -26,7 +26,7 @@ def main():
     if not exists('results'):
         os.makedirs('results')
     file_names = []
-    with open(join(config.base_dir, 'test.txt')) as reader:
+    with open(join(config.base_dir, 'val.txt')) as reader:
         lines = reader.readlines()
     for line in lines:
         file_names.append(line.rstrip().split(' ')[0])
@@ -42,6 +42,9 @@ def main():
         image_np = image_np.astype(np.float32) / 255.0
 
         boxes, scores, _ = model.predict(image_np[np.newaxis, ...])
+
+        boxes, scores = np.squeeze(boxes, 0), np.squeeze(scores, 0)
+
         boxes[:, [0, 2]] = (boxes[:, [0, 2]] - dw) / scale
         boxes[:, [1, 3]] = (boxes[:, [1, 3]] - dh) / scale
         image = draw_bbox(image, boxes, scores)

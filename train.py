@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from nets import nn
 from utils import config
-from utils.dataset import DataLoader
+from utils.dataset import input_fn
 
 np.random.seed(12345)
 tf.random.set_seed(12345)
@@ -28,7 +28,7 @@ print(f'[INFO] {len(file_names)} data points')
 num_replicas = strategy.num_replicas_in_sync
 steps = len(file_names) // config.batch_size
 
-dataset = DataLoader().input_fn(file_names)
+dataset = input_fn(file_names)
 dataset = strategy.experimental_distribute_dataset(dataset)
 
 with strategy.scope():

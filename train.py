@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from nets import nn
 from utils import config
-from utils.dataset import input_fn
+from utils.dataset import input_fn, DataLoader
 
 np.random.seed(12345)
 tf.random.set_seed(12345)
@@ -23,12 +23,17 @@ with open(join(config.base_dir, 'train.txt')) as reader:
         image_path = join(config.base_dir, config.image_dir, line.rstrip() + '.jpg')
         label_path = join(config.base_dir, config.label_dir, line.rstrip() + '.xml')
         if exists(image_path) and exists(label_path):
-            file_names.append(line.rstrip())
+            if exists(join(config.base_dir, 'TF')):
+                file_names.append(join(config.base_dir, 'TF', line.rstrip() + '.tf'))
+            else:
+                file_names.append(line.rstrip())
 print(f'[INFO] {len(file_names)} data points')
 num_replicas = strategy.num_replicas_in_sync
 steps = len(file_names) // config.batch_size
-
-dataset = input_fn(file_names)
+if exists(join(config.base_dir, 'TF')):
+    dataset = DataLoader().input_fn(file_names)
+else:
+    dataset = input_fn(file_names)
 dataset = strategy.experimental_distribute_dataset(dataset)
 
 with strategy.scope():

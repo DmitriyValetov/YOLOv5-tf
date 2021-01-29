@@ -3,8 +3,7 @@
 #### Train
 * Change dataset path and `class_dict` in `config.py`
 * Choose version in `config.py`
-* Run `python generate.py` to generate anchors for your dataset
-* Change anchors in `config.py`
+* Optional, `python generate.py` to generate anchors for your dataset and change anchors in `config.py`
 * Run `python train.py` for training
 
 #### Test

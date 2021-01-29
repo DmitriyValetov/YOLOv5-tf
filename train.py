@@ -14,7 +14,7 @@ np.random.seed(12345)
 tf.random.set_seed(12345)
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 strategy = tf.distribute.MirroredStrategy()
 
 file_names = []

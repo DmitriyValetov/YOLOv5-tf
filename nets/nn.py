@@ -7,7 +7,7 @@ from tensorflow.keras import backend, layers
 from utils import config
 
 initializer = tf.random_normal_initializer(stddev=0.01)
-l2 = tf.keras.regularizers.l2(0.0005)
+l2 = tf.keras.regularizers.l2(4e-5)
 
 
 def activation_fn(x):
@@ -287,8 +287,8 @@ class ComputeLoss(object):
 class CosineLrSchedule(tf.optimizers.schedules.LearningRateSchedule):
     def __init__(self, steps):
         super().__init__()
-        self.adjusted_lr = 0.001 * config.batch_size / 64
-        self.lr_warmup_init = 0.0001
+        self.adjusted_lr = 0.008 * config.batch_size / 64
+        self.lr_warmup_init = 0.0008
         self.lr_warmup_step = steps
         self.decay_steps = tf.cast((config.num_epochs - 1) * self.lr_warmup_step, tf.float32)
 

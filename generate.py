@@ -160,4 +160,3 @@ def generate_tf_record():
 if __name__ == "__main__":
     generator = AnchorGenerator(9)
     generator.generate_anchor()
-    generate_tf_record()

@@ -5,23 +5,25 @@ from os.path import join
 
 import numpy as np
 import tensorflow as tf
-from utils import config
 
 from nets import nn
+from utils import config
 from utils.dataset import DataLoader
 
 np.random.seed(12345)
 tf.random.set_seed(12345)
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 strategy = tf.distribute.MirroredStrategy()
 
 file_names = []
 with open(join(config.base_dir, 'train.txt')) as reader:
     for line in reader.readlines():
-        image_path = join(config.base_dir, config.image_dir, line.rstrip().split(' ')[0] + '.jpg')
-        label_path = join(config.base_dir, config.label_dir, line.rstrip().split(' ')[0] + '.xml')
+        image_path = join(config.base_dir, config.image_dir, line.rstrip() + '.jpg')
+        label_path = join(config.base_dir, config.label_dir, line.rstrip() + '.xml')
         if exists(image_path) and exists(label_path):
-            file_names.append(join(config.base_dir, 'TF', line.rstrip().split(' ')[0] + '.tf'))
+            file_names.append(line.rstrip())
 print(f'[INFO] {len(file_names)} data points')
 num_replicas = strategy.num_replicas_in_sync
 steps = len(file_names) // config.batch_size

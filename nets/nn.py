@@ -264,6 +264,11 @@ class ComputeLoss(object):
         conf_loss_neg = conf_neg_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_mask, logits=pred_conf)
 
         conf_loss = conf_loss_pos + conf_loss_neg
+        if config.use_focal:
+            alpha = 0.25
+            gamma = 1.5
+            focal_mask = alpha * tf.pow(tf.abs(object_mask - tf.sigmoid(pred_conf)), gamma)
+            conf_loss *= focal_mask
         conf_loss = tf.reduce_sum(conf_loss * mix_w)
 
         delta = 0.01

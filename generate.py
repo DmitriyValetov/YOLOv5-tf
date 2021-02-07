@@ -96,7 +96,7 @@ def byte_feature(value):
 
 
 def build_example(file_name):
-    in_image = util.load_image(file_name)
+    in_image = util.load_image(file_name)[:, :, ::-1]
     boxes, label = util.load_label(file_name)
     boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
 

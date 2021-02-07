@@ -59,7 +59,6 @@ def parse_annotations(xml_root):
 def load_image(f_name):
     path = join(config.base_dir, config.image_dir, f_name + '.jpg')
     image = cv2.imread(path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image
 
 
@@ -141,3 +140,27 @@ def process_box(boxes, labels):
         y_true[feature_map_group][y, x, k, -1] = boxes[i, -1]
 
     return y_true_1, y_true_2, y_true_3
+
+
+def random_hsv(image, h_gain=0.015, s_gain=0.7, v_gain=0.4):
+    r = np.random.uniform(-1, 1, 3) * [h_gain, s_gain, v_gain] + 1  # random gains
+    hue, sat, val = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
+    dtype = image.dtype  # uint8
+
+    x = np.arange(0, 256, dtype=np.int16)
+    lut_hue = ((x * r[0]) % 180).astype(dtype)
+    lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
+    lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
+
+    image_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))).astype(dtype)
+    cv2.cvtColor(image_hsv, cv2.COLOR_HSV2BGR, dst=image)  # no return needed
+
+
+def random_flip(image, box):
+    if np.random.uniform() < 0.5:
+        _, w = image.shape[:2]
+        image = cv2.flip(image, 1)
+        box[:, 0] = w - box[:, 2]
+        box[:, 2] = w - box[:, 0]
+
+    return image, box

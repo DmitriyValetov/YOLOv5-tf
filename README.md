@@ -20,9 +20,17 @@
         ├── train.txt
         ├── test.txt
         
-#### Note 
+#### Note
 * xml file should be in PascalVOC format
 * `train.txt` contains image names without extension 
+
+#### Recommendation (for docker users)
+* `docker pull nvcr.io/nvidia/tensorflow:20.12-tf2-py3`
+* `nvidia-docker run --gpus all -v /your/project/folder:/Projects  -it nvcr.io/nvidia/tensorflow:20.12-tf2-py3`
+* `cd ../Projects`  
+* `apt-get update`
+* `apt-get install ffmpeg libsm6 libxext6  -y`
+* `pip install opencv-python`
 
 #### Reference
 * https://github.com/ultralytics/yolov5

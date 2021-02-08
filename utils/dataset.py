@@ -8,7 +8,6 @@ from utils import config
 from utils.util import load_image
 from utils.util import load_label
 from utils.util import process_box
-from utils.util import random_flip
 from utils.util import resize
 
 
@@ -25,7 +24,6 @@ class Generator(Sequence):
         boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
 
         image, boxes = resize(image, boxes)
-        image, boxes = random_flip(image, boxes)
 
         image = image[:, :, ::-1].astype(np.float32)
         image = image / 255.0

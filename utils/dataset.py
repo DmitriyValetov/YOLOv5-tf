@@ -1,17 +1,12 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.utils import OrderedEnqueuer
-from tensorflow.keras.utils import Sequence
+from tensorflow.keras import utils
 
-from utils import config
-from utils.util import load_image
-from utils.util import load_label
-from utils.util import process_box
-from utils.util import resize
+from utils import config, util
 
 
-class Generator(Sequence):
+class Generator(utils.Sequence):
     def __init__(self, file_names):
         self.file_names = file_names
 
@@ -19,15 +14,15 @@ class Generator(Sequence):
         return int(np.floor(len(self.file_names) / config.batch_size))
 
     def __getitem__(self, index):
-        image = load_image(self.file_names[index])
-        boxes, label = load_label(self.file_names[index])
+        image = util.load_image(self.file_names[index])
+        boxes, label = util.load_label(self.file_names[index])
         boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
 
-        image, boxes = resize(image, boxes)
+        image, boxes = util.resize(image, boxes)
 
         image = image[:, :, ::-1].astype(np.float32)
         image = image / 255.0
-        y_true_1, y_true_2, y_true_3 = process_box(boxes, label)
+        y_true_1, y_true_2, y_true_3 = util.process_box(boxes, label)
         return image, y_true_1, y_true_2, y_true_3
 
     def on_epoch_end(self):
@@ -36,7 +31,7 @@ class Generator(Sequence):
 
 def input_fn(file_names):
     def generator_fn():
-        generator = OrderedEnqueuer(Generator(file_names), True)
+        generator = utils.OrderedEnqueuer(Generator(file_names), True)
         generator.start(workers=min(os.cpu_count() - 2, config.batch_size))
         while True:
             image, y_true_1, y_true_2, y_true_3 = generator.get().__next__()
@@ -82,7 +77,8 @@ class DataLoader:
                               (config.image_size // 16, config.image_size // 16, 3, 6 + len(config.class_dict)))
 
         y_true_3 = tf.io.decode_raw(features['y_true_3'], tf.float32)
-        y_true_3 = tf.reshape(y_true_3, (config.image_size // 8, config.image_size // 8, 3, 6 + len(config.class_dict)))
+        y_true_3 = tf.reshape(y_true_3,
+                              (config.image_size // 8,  config.image_size // 8,  3, 6 + len(config.class_dict)))
 
         return in_image, y_true_1, y_true_2, y_true_3
 

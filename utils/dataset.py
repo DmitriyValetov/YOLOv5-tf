@@ -9,7 +9,6 @@ from utils.util import load_image
 from utils.util import load_label
 from utils.util import process_box
 from utils.util import random_flip
-from utils.util import random_hsv
 from utils.util import resize
 
 
@@ -24,7 +23,7 @@ class Generator(Sequence):
         image = load_image(self.file_names[index])
         boxes, label = load_label(self.file_names[index])
         boxes = np.concatenate((boxes, np.full(shape=(boxes.shape[0], 1), fill_value=1., dtype=np.float32)), axis=-1)
-        random_hsv(image)
+
         image, boxes = resize(image, boxes)
         image, boxes = random_flip(image, boxes)
 
@@ -49,7 +48,7 @@ def input_fn(file_names):
     output_shapes = ((config.image_size, config.image_size, 3),
                      (config.image_size // 32, config.image_size // 32, 3, len(config.class_dict) + 6),
                      (config.image_size // 16, config.image_size // 16, 3, len(config.class_dict) + 6),
-                     (config.image_size // 8, config.image_size // 8, 3, len(config.class_dict) + 6))
+                     (config.image_size // 8,  config.image_size // 8,  3, len(config.class_dict) + 6))
 
     dataset = tf.data.Dataset.from_generator(generator=generator_fn,
                                              output_types=output_types,

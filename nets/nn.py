@@ -271,11 +271,12 @@ class ComputeLoss(object):
             conf_loss *= focal_mask
         conf_loss = tf.reduce_sum(conf_loss * mix_w)
 
-        delta = 0.01
-        label_target = (1 - delta) * y_true[..., 5:-1] + delta * 1. / len(config.class_dict)
+        true_conf = y_true[..., 5:-1]
+        if config.use_smooth:
+            delta = 0.01
+            true_conf = (1 - delta) * true_conf + delta * 1. / len(config.class_dict)
 
-        class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_target,
-                                                                           logits=pred_prob) * mix_w
+        class_loss = object_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=true_conf, logits=pred_prob) * mix_w
         class_loss = tf.reduce_sum(class_loss)
 
         return xy_loss + wh_loss + conf_loss + class_loss
